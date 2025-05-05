@@ -57,7 +57,7 @@ class EcbCoordinator:
                     rate = float(cube.attrib["rate"])
                     rates[currency] = rate
                 self.rates = rates
-                _LOGGER.info("ECB exchange rates updated")
+                _LOGGER.info("ECB exchange rates updated: %s", rates)
         except Exception as e:
             _LOGGER.error("Failed to refresh ECB rates: %s", e)
 
@@ -98,3 +98,4 @@ class ExchangeRateSensor(Entity):
 
     async def async_update(self):
         await self.coordinator.async_refresh()
+
