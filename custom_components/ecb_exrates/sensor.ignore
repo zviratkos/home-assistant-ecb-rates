@@ -9,11 +9,9 @@ from .const import DOMAIN, ECB_URL
 
 _LOGGER = logging.getLogger(__name__)
 
+
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
     symbols_config = config.get("symbols", [])
-    update_interval = timedelta(hours=config.get("update_interval", 12))
-    precision = config.get("precision", 4)
-
     pairs = []
     for symbol in symbols_config:
         if "/" in symbol:
@@ -32,12 +30,12 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     sensors = []
     for base, quote in pairs:
         if base in coordinator.rates and quote in coordinator.rates:
-            sensors.append(ExchangeRateSensor(coordinator, base, quote, precision))
+            sensors.append(ExchangeRateSensor(coordinator, base, quote))
         else:
             _LOGGER.warning("Missing currency in ECB data: %s or %s", base, quote)
     async_add_entities(sensors)
 
-    async_track_time_interval(hass, coordinator.async_refresh, update_interval)
+    async_track_time_interval(hass, coordinator.async_refresh, timedelta(hours=12))
 
 
 class EcbCoordinator:
@@ -63,12 +61,11 @@ class EcbCoordinator:
 
 
 class ExchangeRateSensor(Entity):
-    def __init__(self, coordinator, base, quote, precision):
+    def __init__(self, coordinator, base, quote):
         self.coordinator = coordinator
         self.base = base
         self.quote = quote
-        self.precision = precision
-        self._pair_id = f"{base}{quote}".lower()
+        self._name = f"{base.lower()}_{quote.lower()}"
 
     @property
     def name(self):
@@ -77,12 +74,12 @@ class ExchangeRateSensor(Entity):
     @property
     def state(self):
         if self.base in self.coordinator.rates and self.quote in self.coordinator.rates:
-            return round(self.coordinator.rates[self.quote] / self.coordinator.rates[self.base], self.precision)
+            return round(self.coordinator.rates[self.quote] / self.coordinator.rates[self.base], 4)
         return None
 
     @property
     def unique_id(self):
-        return f"sensor.ecbrates.{self._pair_id}"
+        return f"ecb_{self._name}"
 
     @property
     def unit_of_measurement(self):
@@ -95,6 +92,10 @@ class ExchangeRateSensor(Entity):
     @property
     def should_poll(self):
         return False
+
+    @property
+    def unique_id(self):
+        return f"sensor.ecbrates.{self._pair_id}"
 
     async def async_update(self):
         await self.coordinator.async_refresh()
