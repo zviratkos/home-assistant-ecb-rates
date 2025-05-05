@@ -1,9 +1,14 @@
 {
   "domain": "ecb_exrates",
   "name": "ECB Exchange Rates",
+  "codeowners": [
+    "@zviratkos"
+  ],
   "version": "1.0.0",
-  "documentation": "",
+  "documentation": "https://github.com/zviratkos/home-assistant-ecb-rates",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/zviratkos/home-assistant-ecb-rates",
   "dependencies": [],
-  "codeowners": [],
   "requirements": ["aiohttp"]
 }
