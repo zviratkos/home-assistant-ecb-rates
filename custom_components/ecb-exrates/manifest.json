@@ -1,0 +1,9 @@
+{
+  "domain": "ecb_exrates",
+  "name": "ECB Exchange Rates",
+  "version": "1.0.0",
+  "documentation": "",
+  "dependencies": [],
+  "codeowners": [],
+  "requirements": ["aiohttp"]
+}
