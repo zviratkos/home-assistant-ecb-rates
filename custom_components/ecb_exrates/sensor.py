@@ -1,101 +1,100 @@
-import xml.etree.ElementTree as ET
 import logging
+import xml.etree.ElementTree as ET
 from datetime import timedelta
-from aiohttp import ClientSession
 from homeassistant.helpers.entity import Entity
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.event import async_track_time_interval
-from .const import DOMAIN, ECB_URL
+import aiohttp
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.typing import HomeAssistantType
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    symbols_config = config.get("symbols", [])
-    update_interval = timedelta(hours=config.get("update_interval", 12))
+ECB_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
+NAMESPACE = {"ns": "http://www.ecb.int/vocabulary/2002-08-01/eurofxref"}
+
+async def async_setup_platform(hass: HomeAssistantType, config: dict, async_add_entities, discovery_info=None):
+    """Set up the ECB exchange rate sensors."""
+    currency_pairs = config.get("currency_pairs", [])
+    update_interval = config.get("update_interval", timedelta(hours=1))
     precision = config.get("precision", 4)
 
-    pairs = []
-    for symbol in symbols_config:
-        if "/" in symbol:
-            base, quote = symbol.upper().split("/")
-            pairs.append((base, quote))
-        else:
-            _LOGGER.warning("Invalid symbol format: %s", symbol)
+    _LOGGER.info("Setting up ECB Exchange Rates from configuration.")
+    _LOGGER.info("Configured currency pairs: %s", currency_pairs)
 
-    if not pairs:
-        _LOGGER.error("No valid currency pairs provided in configuration")
+    if not currency_pairs:
+        _LOGGER.error("No currency pairs configured for ECB exchange rate sensors.")
         return
 
-    coordinator = EcbCoordinator(hass)
-    await coordinator.async_refresh()
-
     sensors = []
-    for base, quote in pairs:
-        if base in coordinator.rates and quote in coordinator.rates:
-            sensors.append(ExchangeRateSensor(coordinator, base, quote, precision))
-        else:
-            _LOGGER.warning("Missing currency in ECB data: %s or %s", base, quote)
+    for pair in currency_pairs:
+        sensor = ECBExchangeRateSensor(pair, update_interval, precision, hass)
+        sensors.append(sensor)
+
     async_add_entities(sensors)
 
-    async_track_time_interval(hass, coordinator.async_refresh, update_interval)
+class ECBExchangeRateSensor(Entity):
+    """Representation of a sensor for ECB exchange rate."""
 
-
-class EcbCoordinator:
-    def __init__(self, hass):
-        self.hass = hass
-        self.rates = {}
-
-    async def async_refresh(self, *_):
-        session: ClientSession = async_get_clientsession(self.hass)
-        try:
-            async with session.get(ECB_URL) as response:
-                content = await response.text()
-                root = ET.fromstring(content)
-                rates = {"EUR": 1.0}
-                for cube in root.findall(".//Cube/Cube/Cube"):
-                    currency = cube.attrib["currency"]
-                    rate = float(cube.attrib["rate"])
-                    rates[currency] = rate
-                self.rates = rates
-                _LOGGER.info("ECB exchange rates updated: %s", rates)
-        except Exception as e:
-            _LOGGER.error("Failed to refresh ECB rates: %s", e)
-
-
-class ExchangeRateSensor(Entity):
-    def __init__(self, coordinator, base, quote, precision):
-        self.coordinator = coordinator
-        self.base = base
-        self.quote = quote
-        self.precision = precision
-        self._pair_id = f"{base}{quote}".lower()
+    def __init__(self, currency_pair, update_interval, precision, hass):
+        self._currency_pair = currency_pair
+        self._update_interval = update_interval
+        self._precision = precision
+        self._hass = hass
+        self._rate = 1.0
+        self._name = f"Exchange Rate {currency_pair}"
+        self._unique_id = f"ecb_{currency_pair.replace('/', '_')}"
+        self._state = None
+        self._last_updated = None
 
     @property
     def name(self):
-        return f"Exchange Rate {self.base}/{self.quote}"
+        return self._name
 
     @property
     def state(self):
-        if self.base in self.coordinator.rates and self.quote in self.coordinator.rates:
-            return round(self.coordinator.rates[self.quote] / self.coordinator.rates[self.base], self.precision)
-        return None
+        return round(self._rate, self._precision)
 
     @property
     def unique_id(self):
-        return f"sensor.ecbrates.{self._pair_id}"
-
-    @property
-    def unit_of_measurement(self):
-        return self.quote
-
-    @property
-    def device_class(self):
-        return "monetary"
-
-    @property
-    def should_poll(self):
-        return False
+        return self._unique_id
 
     async def async_update(self):
-        await self.coordinator.async_refresh()
+        """Fetch data from ECB and refresh rates."""
+        try:
+            _LOGGER.info("Fetching ECB data from URL: %s", ECB_URL)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(ECB_URL) as response:
+                    content = await response.text()
+                    if response.status != 200:
+                        _LOGGER.error("Failed to fetch data from ECB API. Status code: %d", response.status)
+                        return
+
+                    root = ET.fromstring(content)
+                    rates = {"EUR": 1.0}
+                    available_currencies = []
+
+                    # Find the Cube with time attribute inside the namespace
+                    cube_time = root.find(".//ns:Cube[@time]", NAMESPACE)
+                    if cube_time is not None:
+                        for cube in cube_time.findall("ns:Cube", NAMESPACE):
+                            currency = cube.attrib.get("currency")
+                            rate = cube.attrib.get("rate")
+                            if currency and rate:
+                                rates[currency] = float(rate)
+                                available_currencies.append(currency)
+                    else:
+                        _LOGGER.warning("No Cube[@time] found in ECB XML.")
+
+                    pair = self._currency_pair.split("/")
+                    if len(pair) == 2 and pair[0] in rates and pair[1] in rates:
+                        self._rate = rates[pair[0]] / rates[pair[1]]
+                    else:
+                        _LOGGER.warning("Currency pair %s not found in ECB data.", self._currency_pair)
+                        self._rate = 1.0
+
+                    _LOGGER.info("ECB exchange rate updated: %s = %s", self._currency_pair, self._rate)
+                    _LOGGER.info("Currencies found in ECB data: %s", available_currencies)
+
+        except Exception as e:
+            _LOGGER.error("Failed to refresh ECB rates: %s", e)
+
 
