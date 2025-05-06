@@ -54,6 +54,10 @@ class ECBExchangeRateSensor(Entity):
         return round(self._rate, self._precision)
 
     @property
+    def device_class(self):
+        return "monetary"
+
+    @property
     def unique_id(self):
         return self._unique_id
 
