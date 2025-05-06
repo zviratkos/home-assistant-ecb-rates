@@ -1,0 +1,14 @@
+{
+  "domain": "exchange_rates",
+  "name": "Currency Exchange Rates",
+  "codeowners": [
+    "@zviratkos"
+  ],
+  "version": "1.0.2",
+  "documentation": "https://github.com/zviratkos/home-assistant-exchange-rates",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/zviratkos/home-assistant-exchange-rates",
+  "dependencies": [],
+  "requirements": ["aiohttp"]
+}
