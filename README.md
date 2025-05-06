@@ -3,5 +3,5 @@
 
 ![ExRates Logo](images/logo_exrates.png)
 
-# home-assistant-ecb-rates
+# home-assistant-exchange-rates
 Currency Exchange Rates integration
