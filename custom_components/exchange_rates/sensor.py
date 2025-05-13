@@ -119,6 +119,7 @@ class ECBExchangeRateSensor(Entity):
                         self._available = True
                         _LOGGER.info("ECB exchange rate updated: %s = %s", self._currency_pair, self._rate)
                         _LOGGER.info("Currencies found in ECB data: %s", available_currencies)
+                        self.async_write_ha_state()
                     else:
                         self._rate = 1.0
                         self._available = False
