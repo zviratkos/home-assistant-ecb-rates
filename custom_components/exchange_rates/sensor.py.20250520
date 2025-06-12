@@ -4,17 +4,14 @@ from datetime import timedelta
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_track_time_interval
 import aiohttp
-#from homeassistant.helpers.typing import HomeAssistantType
-from homeassistant.core import HomeAssistant
+from homeassistant.helpers.typing import HomeAssistantType
 
 _LOGGER = logging.getLogger(__name__)
 
 # ECB exchange rate XML feed URL
 ECB_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
 
-
-#async def async_setup_platform(hass: HomeAssistantType, config: dict, async_add_entities, discovery_info=None):
-async def async_setup_platform(hass: HomeAssistant, config: dict, async_add_entities, discovery_info=None):
+async def async_setup_platform(hass: HomeAssistantType, config: dict, async_add_entities, discovery_info=None):
     """Set up the ECB exchange rate sensors."""
     currency_pairs = config.get("currency_pairs", [])
     update_interval_raw = config.get("update_interval", 1)  # in hours
@@ -38,8 +35,10 @@ async def async_setup_platform(hass: HomeAssistant, config: dict, async_add_enti
     for pair in currency_pairs:
         sensor = ECBExchangeRateSensor(pair, update_interval, precision, hass)
         sensors.append(sensor)
+        # Schedule regular updates
+        async_track_time_interval(hass, sensor.async_update, update_interval)
 
-    async_add_entities(sensors, update_before_add=False)
+    async_add_entities(sensors, update_before_add=True)
 
 
 class ECBExchangeRateSensor(Entity):
@@ -55,19 +54,6 @@ class ECBExchangeRateSensor(Entity):
         self._unique_id = f"ecb_{currency_pair.replace('/', '_')}"
         self._state = None
         self._available = True
-        self._unsub_timer = None
-
-    async def async_added_to_hass(self):
-        """Start the periodic update when added to HA."""
-        self._unsub_timer = async_track_time_interval(
-            self._hass, self.async_update, self._update_interval
-        )
-        await self.async_update()
-
-    async def async_will_remove_from_hass(self):
-        """Stop the periodic update when removed from HA."""
-        if self._unsub_timer:
-            self._unsub_timer()
 
     @property
     def name(self):
@@ -78,12 +64,12 @@ class ECBExchangeRateSensor(Entity):
         return round(self._rate, self._precision)
 
     @property
-    def unique_id(self):
-        return self._unique_id
-
-    @property
     def device_class(self):
         return "monetary"
+
+    @property
+    def unique_id(self):
+        return self._unique_id
 
     @property
     def available(self):
@@ -108,10 +94,8 @@ class ECBExchangeRateSensor(Entity):
                     content = await response.text()
                     root = ET.fromstring(content)
 
-                    ns = {
-                        'gesmes': 'http://www.gesmes.org/xml/2002-08-01',
-                        'e': 'http://www.ecb.int/vocabulary/2002-08-01/eurofxref'
-                    }
+                    ns = {'gesmes': 'http://www.gesmes.org/xml/2002-08-01',
+                          'e': 'http://www.ecb.int/vocabulary/2002-08-01/eurofxref'}
 
                     rates = {"EUR": 1.0}
                     available_currencies = []
@@ -135,7 +119,6 @@ class ECBExchangeRateSensor(Entity):
                         self._available = True
                         _LOGGER.info("ECB exchange rate updated: %s = %s", self._currency_pair, self._rate)
                         _LOGGER.info("Currencies found in ECB data: %s", available_currencies)
-                        _LOGGER.info("Setting state: %s (rounded: %s)", self._rate, round(self._rate, self._precision))
                         self.async_write_ha_state()
                     else:
                         self._rate = 1.0
