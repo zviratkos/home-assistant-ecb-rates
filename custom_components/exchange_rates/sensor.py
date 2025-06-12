@@ -4,7 +4,8 @@ from datetime import timedelta
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_track_time_interval
 import aiohttp
-from homeassistant.helpers.typing import HomeAssistantType
+#from homeassistant.helpers.typing import HomeAssistantType
+from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -12,7 +13,8 @@ _LOGGER = logging.getLogger(__name__)
 ECB_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
 
 
-async def async_setup_platform(hass: HomeAssistantType, config: dict, async_add_entities, discovery_info=None):
+#async def async_setup_platform(hass: HomeAssistantType, config: dict, async_add_entities, discovery_info=None):
+async def async_setup_platform(hass: HomeAssistant, config: dict, async_add_entities, discovery_info=None):
     """Set up the ECB exchange rate sensors."""
     currency_pairs = config.get("currency_pairs", [])
     update_interval_raw = config.get("update_interval", 1)  # in hours
